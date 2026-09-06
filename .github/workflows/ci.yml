@@ -14,10 +14,10 @@ jobs:
       SDL_AUDIODRIVER: dummy
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: "pip"
@@ -43,7 +43,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Create build artifact
         run: |
@@ -51,7 +51,7 @@ jobs:
           zip -r dist/nested-tictactoe.zip game.py mainMenu.py rules.py terminal.py requirements.txt
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: nested-tictactoe-build
           path: dist/nested-tictactoe.zip
