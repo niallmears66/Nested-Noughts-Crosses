@@ -228,7 +228,7 @@ def get_cell(pos, current_board):
 def check_winner(board):
     # Check rows
     for row in board:
-        if row[0] == row[1] == row[1] != '-':
+        if row[0] == row[1] == row[2] != '-':
             return row[0]
     # Check columns
     for col in range(3):
