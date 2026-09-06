@@ -45,3 +45,9 @@ def test_get_cell_outside_active_board_returns_invalid():
     # should be reported as invalid (-1, -1).
     row, col = game.get_cell((0, 0), (2, 2))
     assert (row, col) == (-1, -1)
+
+
+def test_check_winner_partial_row_is_not_a_win():
+    board = empty_board()
+    board[0] = ['X', 'X', 'O']
+    assert game.check_winner(board) is None
