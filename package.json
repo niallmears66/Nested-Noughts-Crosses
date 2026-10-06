@@ -5,8 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "test": "node --test tests/",
-    "lint": "eslint src/ tests/"
+    "test": "node --test",
+    "lint": "node node_modules/eslint/bin/eslint.js src/ tests/"
   },
   "devDependencies": {
     "eslint": "^9.9.0"

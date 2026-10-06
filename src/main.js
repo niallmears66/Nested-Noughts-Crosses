@@ -15,6 +15,7 @@ import {
   applyMove,
 } from './gameLogic.js';
 import { drawFallingShape, drawBoard, drawButton, drawTitle, drawInfoLine, drawOverlay, COLORS } from './render.js';
+import { computeCanvasTransform } from './canvasSizing.js';
 
 // All drawing math below uses this *logical* size - it has nothing to do
 // with how many actual device pixels the canvas is rendered at. That's
@@ -23,20 +24,23 @@ import { drawFallingShape, drawBoard, drawButton, drawTitle, drawInfoLine, drawO
 // displays (the CSS stretches the canvas element to fill the screen; without
 // matching the internal pixel buffer to that size, the browser blurs the
 // bitmap when stretching it, which is why marks were looking grey instead
-// of solid white/colored).
+// of solid white/colored). The actual sizing math is in canvasSizing.js so
+// it can be unit tested without a real DOM.
 const CANVAS_SIZE = 600;
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 
 function resizeCanvasForDisplay() {
   const dpr = window.devicePixelRatio || 1;
-  const displayWidth = canvas.clientWidth;
-  const displayHeight = canvas.clientHeight;
-  canvas.width = Math.round(displayWidth * dpr);
-  canvas.height = Math.round(displayHeight * dpr);
-  // Scale so every draw call can keep using CANVAS_SIZE-based coordinates,
-  // regardless of the real pixel density or on-screen size.
-  ctx.setTransform(dpr * (displayWidth / CANVAS_SIZE), 0, 0, dpr * (displayHeight / CANVAS_SIZE), 0, 0);
+  const { bufferWidth, bufferHeight, scaleX, scaleY } = computeCanvasTransform(
+    canvas.clientWidth,
+    canvas.clientHeight,
+    dpr,
+    CANVAS_SIZE
+  );
+  canvas.width = bufferWidth;
+  canvas.height = bufferHeight;
+  ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
 }
 
 resizeCanvasForDisplay();
