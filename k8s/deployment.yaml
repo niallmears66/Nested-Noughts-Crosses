@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nested-tictactoe-web
+  labels:
+    app: nested-tictactoe-web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nested-tictactoe-web
+  template:
+    metadata:
+      labels:
+        app: nested-tictactoe-web
+    spec:
+      containers:
+        - name: nested-tictactoe-web
+          # Replace with your actual image once you push it to a registry,
+          # e.g. ghcr.io/yourname/nested-tictactoe-web:latest
+          image: nested-tictactoe-web:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10

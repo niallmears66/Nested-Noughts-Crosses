@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: nested-tictactoe-web
+spec:
+  selector:
+    app: nested-tictactoe-web
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+  # Swap to type: LoadBalancer (cloud) or add an Ingress resource
+  # if you want this reachable from outside the cluster.

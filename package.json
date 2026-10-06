@@ -1,0 +1,14 @@
+{
+  "name": "nested-tictactoe-web",
+  "version": "1.0.0",
+  "description": "Browser version of Nested Noughts and Crosses",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/",
+    "lint": "eslint src/ tests/"
+  },
+  "devDependencies": {
+    "eslint": "^9.9.0"
+  }
+}

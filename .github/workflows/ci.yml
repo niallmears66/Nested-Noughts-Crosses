@@ -9,50 +9,49 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
-    env:
-      SDL_VIDEODRIVER: dummy
-      SDL_AUDIODRIVER: dummy
     steps:
       - name: Check out code
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-          cache: "pip"
+          node-version: "22"
+          cache: "npm"
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: npm install
 
-      - name: Lint with flake8
-        run: |
-          # Fail the build on syntax errors / undefined names.
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Full style report, non-blocking.
-          flake8 . --count --exit-zero --max-line-length=120 --statistics
+      - name: Lint
+        run: npm run lint
 
-      - name: Run tests (headless)
-        run: pytest -v
+      - name: Run tests
+        run: npm test
 
-  package:
+  docker-build:
     needs: lint-and-test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - name: Check out code
         uses: actions/checkout@v5
 
-      - name: Create build artifact
-        run: |
-          mkdir -p dist
-          zip -r dist/nested-tictactoe.zip game.py mainMenu.py rules.py terminal.py requirements.txt
+      - name: Build Docker image
+        run: docker build -t nested-tictactoe-web:${{ github.sha }} .
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: nested-tictactoe-build
-          path: dist/nested-tictactoe.zip
-          retention-days: 14
+      # To actually deploy, add a step here to push the image to a registry
+      # (Docker Hub, GHCR, ECR, etc.) and then `kubectl apply -f k8s/` or
+      # update the image tag via your deployment tool of choice.
+
+  validate-k8s-manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up kubeconform
+        run: |
+          curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate manifests
+        run: kubeconform -strict -summary k8s/*.yaml
