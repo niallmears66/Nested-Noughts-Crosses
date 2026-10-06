@@ -14,8 +14,14 @@ export const COLORS = {
   background: '#0a0a0a',
   gridOuter: '#3a3a3a',
   gridInner: '#2a2a2a',
-  mark: '#ffffff',
-  activeBoardHighlight: 'rgba(80, 205, 120, 0.12)',
+  // X and O get distinct, saturated colors so they're never confused with
+  // each other or with the grid lines - matching the blue/red split the
+  // original pygame menu's falling shapes used.
+  markX: '#4287f5',
+  markO: '#ff4040',
+  bigMarkX: '#4287f5',
+  bigMarkO: '#ff4040',
+  activeBoardHighlight: 'rgba(80, 205, 120, 0.18)',
   wonBoardOverlayX: 'rgba(66, 135, 245, 0.18)',
   wonBoardOverlayO: 'rgba(245, 90, 90, 0.18)',
   menuButton: '#32cd32',
@@ -44,8 +50,36 @@ export function drawFallingShape(ctx, shape) {
   }
 }
 
-/** Draw the full nested 9x9 game grid with marks, the active-board highlight, and won-board tinting. */
-export function drawBoard(ctx, canvasSize, boards, activeBoard, winners) {
+/** Draw a single large X or O filling a box, used to mark a sub-board as won. */
+function drawBigMark(ctx, mark, x, y, size) {
+  const pad = size * 0.12;
+  ctx.lineWidth = Math.max(4, size * 0.08);
+  ctx.strokeStyle = mark === 'X' ? COLORS.bigMarkX : COLORS.bigMarkO;
+  ctx.lineCap = 'round';
+  if (mark === 'X') {
+    ctx.beginPath();
+    ctx.moveTo(x + pad, y + pad);
+    ctx.lineTo(x + size - pad, y + size - pad);
+    ctx.moveTo(x + size - pad, y + pad);
+    ctx.lineTo(x + pad, y + size - pad);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2 - pad, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+}
+
+/**
+ * Draw the full nested 9x9 game grid with marks, the active-board highlight,
+ * and a big X/O over any sub-board that's been won.
+ *
+ * @param activeBoard [row, col] the player is restricted to, or null for "play anywhere"
+ * @param winners 3x3 array of 'X' | 'O' | null - winner of each sub-board
+ * @param fulls 3x3 array of booleans - whether each sub-board is completely filled
+ */
+export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) {
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, canvasSize, canvasSize);
 
@@ -56,15 +90,20 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners) {
     for (let j = 0; j < GRID_SIZE; j++) {
       const ox = j * outerCell;
       const oy = i * outerCell;
+      const winner = winners[i][j];
+      const isOpen = !winner && !(fulls && fulls[i][j]);
 
-      // Highlight the sub-board the current player must play in.
-      if (activeBoard && activeBoard[0] === i && activeBoard[1] === j) {
+      // Highlight every sub-board the player may legally click into:
+      // either the one specific board they're restricted to, or - when
+      // free to play anywhere - every still-open board.
+      const isRestrictedToHere = activeBoard && activeBoard[0] === i && activeBoard[1] === j;
+      const freeToPlayAnywhere = !activeBoard;
+      if ((isRestrictedToHere || freeToPlayAnywhere) && isOpen) {
         ctx.fillStyle = COLORS.activeBoardHighlight;
         ctx.fillRect(ox, oy, outerCell, outerCell);
       }
 
       // Tint a sub-board once it has been won.
-      const winner = winners[i][j];
       if (winner === 'X') {
         ctx.fillStyle = COLORS.wonBoardOverlayX;
         ctx.fillRect(ox, oy, outerCell, outerCell);
@@ -78,35 +117,43 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners) {
       ctx.lineWidth = 3;
       ctx.strokeRect(ox, oy, outerCell, outerCell);
 
-      // Inner cells + marks.
-      for (let k = 0; k < GRID_SIZE; k++) {
-        for (let l = 0; l < GRID_SIZE; l++) {
-          const cx = ox + l * innerCell;
-          const cy = oy + k * innerCell;
+      // Inner cells + marks - skipped once the sub-board is won, since the
+      // big mark below replaces them.
+      if (!winner) {
+        for (let k = 0; k < GRID_SIZE; k++) {
+          for (let l = 0; l < GRID_SIZE; l++) {
+            const cx = ox + l * innerCell;
+            const cy = oy + k * innerCell;
 
-          ctx.strokeStyle = COLORS.gridInner;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(cx, cy, innerCell, innerCell);
+            ctx.strokeStyle = COLORS.gridInner;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(cx, cy, innerCell, innerCell);
 
-          const mark = boards[i][j][k][l];
-          const pad = innerCell * 0.2;
-          if (mark === 'X') {
-            ctx.strokeStyle = COLORS.mark;
-            ctx.lineWidth = 4;
-            ctx.beginPath();
-            ctx.moveTo(cx + pad, cy + pad);
-            ctx.lineTo(cx + innerCell - pad, cy + innerCell - pad);
-            ctx.moveTo(cx + innerCell - pad, cy + pad);
-            ctx.lineTo(cx + pad, cy + innerCell - pad);
-            ctx.stroke();
-          } else if (mark === 'O') {
-            ctx.strokeStyle = COLORS.mark;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(cx + innerCell / 2, cy + innerCell / 2, innerCell / 2 - pad, 0, Math.PI * 2);
-            ctx.stroke();
+            const mark = boards[i][j][k][l];
+            const pad = innerCell * 0.2;
+            if (mark === 'X') {
+              ctx.strokeStyle = COLORS.markX;
+              ctx.lineWidth = 4;
+              ctx.beginPath();
+              ctx.moveTo(cx + pad, cy + pad);
+              ctx.lineTo(cx + innerCell - pad, cy + innerCell - pad);
+              ctx.moveTo(cx + innerCell - pad, cy + pad);
+              ctx.lineTo(cx + pad, cy + innerCell - pad);
+              ctx.stroke();
+            } else if (mark === 'O') {
+              ctx.strokeStyle = COLORS.markO;
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              ctx.arc(cx + innerCell / 2, cy + innerCell / 2, innerCell / 2 - pad, 0, Math.PI * 2);
+              ctx.stroke();
+            }
           }
         }
+      }
+
+      // Big winning mark, drawn last so it sits clearly on top.
+      if (winner) {
+        drawBigMark(ctx, winner, ox, oy, outerCell);
       }
     }
   }

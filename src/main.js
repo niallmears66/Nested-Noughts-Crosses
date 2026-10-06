@@ -10,16 +10,37 @@ import {
   GRID_SIZE,
   createEmptyBoards,
   checkWinner,
+  isBoardFull,
   checkGameWinner,
   applyMove,
 } from './gameLogic.js';
 import { drawFallingShape, drawBoard, drawButton, drawTitle, drawInfoLine, drawOverlay, COLORS } from './render.js';
 
+// All drawing math below uses this *logical* size - it has nothing to do
+// with how many actual device pixels the canvas is rendered at. That's
+// handled separately by resizeCanvasForDisplay(), which is what keeps
+// lines crisp instead of blurry/grey on high-resolution or scaled-up
+// displays (the CSS stretches the canvas element to fill the screen; without
+// matching the internal pixel buffer to that size, the browser blurs the
+// bitmap when stretching it, which is why marks were looking grey instead
+// of solid white/colored).
 const CANVAS_SIZE = 600;
 const canvas = document.getElementById('game-canvas');
-canvas.width = CANVAS_SIZE;
-canvas.height = CANVAS_SIZE;
 const ctx = canvas.getContext('2d');
+
+function resizeCanvasForDisplay() {
+  const dpr = window.devicePixelRatio || 1;
+  const displayWidth = canvas.clientWidth;
+  const displayHeight = canvas.clientHeight;
+  canvas.width = Math.round(displayWidth * dpr);
+  canvas.height = Math.round(displayHeight * dpr);
+  // Scale so every draw call can keep using CANVAS_SIZE-based coordinates,
+  // regardless of the real pixel density or on-screen size.
+  ctx.setTransform(dpr * (displayWidth / CANVAS_SIZE), 0, 0, dpr * (displayHeight / CANVAS_SIZE), 0, 0);
+}
+
+resizeCanvasForDisplay();
+window.addEventListener('resize', resizeCanvasForDisplay);
 
 const RULE_TEXT = [
   'Objective:',
@@ -131,7 +152,8 @@ function renderRules() {
 function renderGame() {
   const g = state.game;
   const winners = g.boards.map((row) => row.map((sb) => checkWinner(sb)));
-  drawBoard(ctx, CANVAS_SIZE, g.boards, g.activeBoard, winners);
+  const fulls = g.boards.map((row) => row.map((sb) => isBoardFull(sb)));
+  drawBoard(ctx, CANVAS_SIZE, g.boards, g.activeBoard, winners, fulls);
 
   const hitboxes = {};
 
