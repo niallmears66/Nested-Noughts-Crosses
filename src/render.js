@@ -12,8 +12,14 @@ import { GRID_SIZE } from './gameLogic.js';
 
 export const COLORS = {
   background: '#0a0a0a',
-  gridOuter: '#3a3a3a',
-  gridInner: '#2a2a2a',
+  // Previous values (#3a3a3a outer, #2a2a2a inner) were too close to the
+  // #0a0a0a background to read clearly - bumped the brightness gap
+  // significantly so both grid levels are easy to see at a glance.
+  gridOuter: '#787878',
+  gridInner: '#484848',
+  // Very subtle alternating tint on sub-boards (checkerboard), so the 3x3
+  // structure is visible even before you look closely at the grid lines.
+  subBoardAlt: 'rgba(255, 255, 255, 0.035)',
   // X and O get distinct, saturated colors so they're never confused with
   // each other or with the grid lines - matching the blue/red split the
   // original pygame menu's falling shapes used.
@@ -21,7 +27,9 @@ export const COLORS = {
   markO: '#ff4040',
   bigMarkX: '#4287f5',
   bigMarkO: '#ff4040',
-  activeBoardHighlight: 'rgba(80, 205, 120, 0.18)',
+  // Solid, bright green used as a border (not a fill) around every
+  // sub-board the current player is allowed to click into.
+  playableBorder: '#3ddc84',
   wonBoardOverlayX: 'rgba(66, 135, 245, 0.18)',
   wonBoardOverlayO: 'rgba(245, 90, 90, 0.18)',
   menuButton: '#32cd32',
@@ -93,15 +101,20 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
       const winner = winners[i][j];
       const isOpen = !winner && !(fulls && fulls[i][j]);
 
-      // Highlight every sub-board the player may legally click into:
-      // either the one specific board they're restricted to, or - when
-      // free to play anywhere - every still-open board.
-      const isRestrictedToHere = activeBoard && activeBoard[0] === i && activeBoard[1] === j;
-      const freeToPlayAnywhere = !activeBoard;
-      if ((isRestrictedToHere || freeToPlayAnywhere) && isOpen) {
-        ctx.fillStyle = COLORS.activeBoardHighlight;
+      // Subtle checkerboard tint so the 3x3 sub-board structure reads at a
+      // glance, independent of the (previously too-faint) grid lines.
+      if ((i + j) % 2 === 1) {
+        ctx.fillStyle = COLORS.subBoardAlt;
         ctx.fillRect(ox, oy, outerCell, outerCell);
       }
+
+      // Which sub-boards the player may legally click into: either the one
+      // specific board they're restricted to, or - when free to play
+      // anywhere - every still-open board. Drawn as a border (below) rather
+      // than a background fill, so it never washes out the grid lines.
+      const isRestrictedToHere = activeBoard && activeBoard[0] === i && activeBoard[1] === j;
+      const freeToPlayAnywhere = !activeBoard;
+      const isPlayable = (isRestrictedToHere || freeToPlayAnywhere) && isOpen;
 
       // Tint a sub-board once it has been won.
       if (winner === 'X') {
@@ -112,9 +125,10 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
         ctx.fillRect(ox, oy, outerCell, outerCell);
       }
 
-      // Outer grid line.
+      // Outer grid line - thicker than inner lines so the 3x3 sub-board
+      // boundaries are unmistakable even at a glance.
       ctx.strokeStyle = COLORS.gridOuter;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 4;
       ctx.strokeRect(ox, oy, outerCell, outerCell);
 
       // Inner cells + marks - skipped once the sub-board is won, since the
@@ -126,7 +140,7 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
             const cy = oy + k * innerCell;
 
             ctx.strokeStyle = COLORS.gridInner;
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.5;
             ctx.strokeRect(cx, cy, innerCell, innerCell);
 
             const mark = boards[i][j][k][l];
@@ -151,9 +165,18 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
         }
       }
 
-      // Big winning mark, drawn last so it sits clearly on top.
+      // Big winning mark, drawn on top of the won sub-board.
       if (winner) {
         drawBigMark(ctx, winner, ox, oy, outerCell);
+      }
+
+      // Playable-board indicator: a bright inset border, drawn last so it
+      // sits on top of the grid lines and leaves the background untouched.
+      if (isPlayable) {
+        const inset = 3;
+        ctx.strokeStyle = COLORS.playableBorder;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(ox + inset, oy + inset, outerCell - inset * 2, outerCell - inset * 2);
       }
     }
   }
