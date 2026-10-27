@@ -16,6 +16,7 @@ import {
 } from './gameLogic.js';
 import { drawFallingShape, drawBoard, drawButton, drawTitle, drawInfoLine, drawOverlay, COLORS } from './render.js';
 import { computeCanvasTransform } from './canvasSizing.js';
+import { startBackground } from './background.js';
 
 // All drawing math below uses this *logical* size - it has nothing to do
 // with how many actual device pixels the canvas is rendered at. That's
@@ -45,6 +46,9 @@ function resizeCanvasForDisplay() {
 
 resizeCanvasForDisplay();
 window.addEventListener('resize', resizeCanvasForDisplay);
+
+// Large falling X/O shapes in the page regions either side of the board.
+startBackground(document.getElementById('bg-canvas'), canvas);
 
 const RULE_TEXT = [
   'Objective:',
@@ -76,6 +80,25 @@ const state = {
   rulesScroll: 0,
   game: null, // populated by startNewGame()
 };
+
+// ---- Scoreboard (HTML panels either side of the board) ----
+const scoreXEl = document.getElementById('score-x');
+const scoreOEl = document.getElementById('score-o');
+let shownScoreX = null;
+let shownScoreO = null;
+
+// Only touches the page when a number actually changes.
+function updateScoreboard() {
+  const score = state.game ? state.game.score : { X: 0, O: 0 };
+  if (score.X !== shownScoreX) {
+    scoreXEl.textContent = String(score.X);
+    shownScoreX = score.X;
+  }
+  if (score.O !== shownScoreO) {
+    scoreOEl.textContent = String(score.O);
+    shownScoreO = score.O;
+  }
+}
 
 function startNewGame(keepScore = { X: 0, O: 0 }) {
   state.game = {
@@ -198,7 +221,9 @@ function handleClick(evt) {
 
   if (state.screen === 'menu') {
     if (inBox(x, y, lastMenuBoxes.play)) {
-      startNewGame();
+      // Keep the running tally so the scoreboard doesn't reset every time
+      // you visit the menu.
+      startNewGame(state.game ? state.game.score : undefined);
       state.screen = 'game';
     } else if (inBox(x, y, lastMenuBoxes.rules)) {
       state.rulesScroll = 0;
@@ -274,6 +299,7 @@ window.addEventListener('keydown', handleKeydown);
 
 // ---- Main loop ----
 function frame() {
+  updateScoreboard();
   if (state.screen === 'menu') {
     lastMenuBoxes = renderMenu();
   } else if (state.screen === 'rules') {
