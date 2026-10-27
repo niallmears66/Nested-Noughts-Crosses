@@ -14,7 +14,18 @@ import {
   checkGameWinner,
   applyMove,
 } from './gameLogic.js';
-import { drawFallingShape, drawBoard, drawButton, drawTitle, drawInfoLine, drawOverlay, COLORS } from './render.js';
+import {
+  drawFallingShape,
+  drawBoard,
+  drawButton,
+  drawPanel,
+  drawTitle,
+  drawInfoLine,
+  drawOverlay,
+  getButtonBox,
+  COLORS,
+  FONTS,
+} from './render.js';
 import { computeCanvasTransform } from './canvasSizing.js';
 import { startBackground } from './background.js';
 
@@ -52,21 +63,21 @@ startBackground(document.getElementById('bg-canvas'), canvas);
 
 const RULE_TEXT = [
   'Objective:',
-  'Win three smaller tic-tac-toe games in a row across the entire larger grid.',
+  'Win three smaller games in a row across the larger grid.',
   '',
   'Board Layout:',
-  'The game is played on a 3x3 grid, where each cell contains another 3x3 grid.',
+  'A 3x3 grid of boards, each holding its own 3x3 grid.',
   '',
   'Gameplay:',
-  "Wherever you place your symbol in a smaller grid decides which grid your",
-  'opponent must play in next.',
+  'Where you place your symbol decides which smaller grid',
+  'your opponent must play in next.',
   '',
   'Playing in Finished Grids:',
-  'If sent to a smaller grid that is already won or full, you may play in',
-  'any other available smaller grid instead.',
+  'If sent to a grid that is already won or full, you may play',
+  'in any other available smaller grid instead.',
   '',
   'Winning:',
-  'Win a smaller grid, then get three smaller-grid wins in a row to win the game.',
+  'Win three smaller grids in a row to win the game.',
   '',
   'Draw:',
   'If every cell is filled with no winner, the game is a draw.',
@@ -144,9 +155,15 @@ function renderMenu() {
   updateShapes();
   drawShapes();
 
-  drawTitle(ctx, CANVAS_SIZE, 'Nested Noughts & Crosses', 100, 'bold 32px sans-serif');
-  const playBox = drawButton(ctx, CANVAS_SIZE, 'Play', CANVAS_SIZE / 2);
-  const rulesBox = drawButton(ctx, CANVAS_SIZE, 'Rules', CANVAS_SIZE / 2 + 75);
+  // Blue + red bar along the top of the card: X and O.
+  drawPanel(ctx, { x: 50, y: 150, width: 500, height: 285 }, [COLORS.markX, COLORS.markO]);
+  drawTitle(ctx, CANVAS_SIZE, 'Nested Noughts & Crosses', 202, FONTS.title);
+  drawTitle(ctx, CANVAS_SIZE, 'Win three small boards in a row', 234, FONTS.subtitle, COLORS.subtitleText);
+
+  const playBox = getButtonBox(CANVAS_SIZE, 298);
+  const rulesBox = getButtonBox(CANVAS_SIZE, 364);
+  drawButton(ctx, playBox, 'Play', { variant: 'primary', hovered: isHovered(playBox) });
+  drawButton(ctx, rulesBox, 'Rules', { hovered: isHovered(rulesBox) });
   drawInfoLine(ctx, "Press 'P' to pause during a game", 10, CANVAS_SIZE - 15);
 
   return { play: playBox, rules: rulesBox };
@@ -160,18 +177,18 @@ function renderRules() {
   drawShapes();
 
   const titleY = 50 + state.rulesScroll;
-  drawTitle(ctx, CANVAS_SIZE, 'Rules', titleY, 'bold 36px sans-serif');
+  drawTitle(ctx, CANVAS_SIZE, 'Rules', titleY, FONTS.title);
 
   let y = titleY + 40;
   RULE_TEXT.forEach((line) => {
     if (line !== '') {
-      drawInfoLine(ctx, line, 30, y, '#ffffff', '15px sans-serif');
+      drawInfoLine(ctx, line, 30, y, '#ffffff', FONTS.body);
     }
     y += 24;
   });
 
   const backBox = { x: 10, y: 10 + state.rulesScroll, width: 70, height: 24 };
-  drawInfoLine(ctx, '< Back', backBox.x, backBox.y + 18, '#ffffff', '18px sans-serif');
+  drawInfoLine(ctx, '< Back', backBox.x, backBox.y + 18, '#ffffff', FONTS.body);
 
   return { back: backBox };
 }
@@ -180,23 +197,36 @@ function renderGame() {
   const g = state.game;
   const winners = g.boards.map((row) => row.map((sb) => checkWinner(sb)));
   const fulls = g.boards.map((row) => row.map((sb) => isBoardFull(sb)));
-  drawBoard(ctx, CANVAS_SIZE, g.boards, g.activeBoard, winners, fulls);
+  // Once someone has won there is nowhere left to play, so hide the green borders.
+  drawBoard(ctx, CANVAS_SIZE, g.boards, g.activeBoard, winners, fulls, !g.winner);
 
   const hitboxes = {};
 
   if (g.paused) {
-    drawOverlay(ctx, CANVAS_SIZE, 0.65);
-    drawTitle(ctx, CANVAS_SIZE, 'Paused', 100, 'bold 40px sans-serif');
-    drawTitle(ctx, CANVAS_SIZE, `Player ${g.turn}'s turn`, 150, '22px sans-serif');
-    hitboxes.resume = drawButton(ctx, CANVAS_SIZE, 'Resume', 280);
-    hitboxes.menu = drawButton(ctx, CANVAS_SIZE, 'Return to Menu', 350, 220);
-    hitboxes.restart = drawButton(ctx, CANVAS_SIZE, 'Restart', 420);
+    drawOverlay(ctx, CANVAS_SIZE, 0.7);
+    // The card takes the colour of the player whose turn it is.
+    const accent = g.turn === 'X' ? COLORS.markX : COLORS.markO;
+    drawPanel(ctx, { x: 150, y: 130, width: 300, height: 340 }, accent);
+    drawTitle(ctx, CANVAS_SIZE, 'Paused', 178, FONTS.title);
+    drawTitle(ctx, CANVAS_SIZE, `Player ${g.turn}'s turn`, 212, FONTS.subtitle, accent);
+
+    hitboxes.resume = getButtonBox(CANVAS_SIZE, 275);
+    hitboxes.menu = getButtonBox(CANVAS_SIZE, 341);
+    hitboxes.restart = getButtonBox(CANVAS_SIZE, 407);
+    drawButton(ctx, hitboxes.resume, 'Resume', { variant: 'primary', hovered: isHovered(hitboxes.resume) });
+    drawButton(ctx, hitboxes.menu, 'Return to Menu', { hovered: isHovered(hitboxes.menu) });
+    drawButton(ctx, hitboxes.restart, 'Restart', { hovered: isHovered(hitboxes.restart) });
   } else if (g.winner) {
     drawOverlay(ctx, CANVAS_SIZE, 0.7);
-    drawTitle(ctx, CANVAS_SIZE, `Player ${g.winner} wins!`, CANVAS_SIZE / 2 - 80, 'bold 32px sans-serif');
-    drawTitle(ctx, CANVAS_SIZE, `X: ${g.score.X}    O: ${g.score.O}`, CANVAS_SIZE / 2 - 30, '22px sans-serif');
-    hitboxes.menu = drawButton(ctx, CANVAS_SIZE, 'Return to Menu', CANVAS_SIZE / 2 + 60, 220);
-    hitboxes.playAgain = drawButton(ctx, CANVAS_SIZE, 'Play Again', CANVAS_SIZE / 2 + 130);
+    const accent = g.winner === 'X' ? COLORS.markX : COLORS.markO;
+    drawPanel(ctx, { x: 150, y: 155, width: 300, height: 290 }, accent);
+    drawTitle(ctx, CANVAS_SIZE, `Player ${g.winner} wins!`, 205, FONTS.title);
+    drawTitle(ctx, CANVAS_SIZE, `X: ${g.score.X}     O: ${g.score.O}`, 240, FONTS.subtitle, COLORS.subtitleText);
+
+    hitboxes.playAgain = getButtonBox(CANVAS_SIZE, 306);
+    hitboxes.menu = getButtonBox(CANVAS_SIZE, 372);
+    drawButton(ctx, hitboxes.playAgain, 'Play Again', { variant: 'primary', hovered: isHovered(hitboxes.playAgain) });
+    drawButton(ctx, hitboxes.menu, 'Return to Menu', { hovered: isHovered(hitboxes.menu) });
   } else {
     drawInfoLine(ctx, `Player ${g.turn}'s turn`, 10, CANVAS_SIZE - 15);
   }
@@ -214,10 +244,24 @@ function inBox(x, y, box) {
   return box && x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height;
 }
 
-function handleClick(evt) {
+// Mouse position in the canvas's own 600x600 coordinates, whatever size it is on screen.
+function toCanvasCoords(evt) {
   const rect = canvas.getBoundingClientRect();
-  const x = ((evt.clientX - rect.left) / rect.width) * CANVAS_SIZE;
-  const y = ((evt.clientY - rect.top) / rect.height) * CANVAS_SIZE;
+  return {
+    x: ((evt.clientX - rect.left) / rect.width) * CANVAS_SIZE,
+    y: ((evt.clientY - rect.top) / rect.height) * CANVAS_SIZE,
+  };
+}
+
+// Where the mouse is right now, used to highlight the button under it.
+const pointer = { x: -1, y: -1 };
+
+function isHovered(box) {
+  return inBox(pointer.x, pointer.y, box);
+}
+
+function handleClick(evt) {
+  const { x, y } = toCanvasCoords(evt);
 
   if (state.screen === 'menu') {
     if (inBox(x, y, lastMenuBoxes.play)) {
@@ -295,6 +339,15 @@ function handleKeydown(evt) {
 }
 
 canvas.addEventListener('click', handleClick);
+canvas.addEventListener('mousemove', (evt) => {
+  const { x, y } = toCanvasCoords(evt);
+  pointer.x = x;
+  pointer.y = y;
+});
+canvas.addEventListener('mouseleave', () => {
+  pointer.x = -1;
+  pointer.y = -1;
+});
 window.addEventListener('keydown', handleKeydown);
 
 // ---- Main loop ----

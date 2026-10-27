@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { drawBoard, COLORS } from '../src/render.js';
+import { drawBoard, drawButton, drawPanel, getButtonBox, BUTTON_WIDTH, BUTTON_HEIGHT, COLORS } from '../src/render.js';
 import { createEmptyBoards } from '../src/gameLogic.js';
 
 const CANVAS_SIZE = 600;
@@ -33,7 +33,17 @@ class FakeContext {
   stroke() {
     this.ops.push({ type: 'stroke', strokeStyle: this.strokeStyle, lineWidth: this.lineWidth });
   }
-  fillText() {}
+  arcTo() {}
+  closePath() {}
+  save() {}
+  restore() {}
+  clip() {}
+  fill() {
+    this.ops.push({ type: 'fill', fillStyle: this.fillStyle });
+  }
+  fillText(text) {
+    this.ops.push({ type: 'fillText', text, fillStyle: this.fillStyle });
+  }
   setTransform() {}
 }
 
@@ -167,4 +177,152 @@ test('grid lines are bright enough to read clearly against the background', () =
     outerBrightness > innerBrightness,
     'outer (sub-board) grid lines should be brighter than inner (cell) grid lines, for a clear visual hierarchy'
   );
+});
+
+// ---- Hiding the playable-board borders ----
+
+test('showPlayable=false hides the green borders (used once the game has been won)', () => {
+  const boards = createEmptyBoards();
+  const { winners, fulls } = freshWinnersAndFulls();
+
+  for (const activeBoard of [null, [1, 1]]) {
+    const ctx = new FakeContext();
+    drawBoard(ctx, CANVAS_SIZE, boards, activeBoard, winners, fulls, false);
+    const borders = ctx.ops.filter((op) => op.type === 'strokeRect' && op.strokeStyle === COLORS.playableBorder);
+    assert.equal(borders.length, 0);
+  }
+});
+
+// ---- Buttons ----
+
+const BOX = { x: 100, y: 200, width: 240, height: 52 };
+
+function labelDrawn(ctx) {
+  return ctx.ops.find((op) => op.type === 'fillText');
+}
+
+test('getButtonBox: centers the button horizontally and uses the standard size', () => {
+  const box = getButtonBox(600, 300);
+  assert.equal(box.width, BUTTON_WIDTH);
+  assert.equal(box.height, BUTTON_HEIGHT);
+  assert.equal(box.x + box.width / 2, 300, 'horizontally centered');
+  assert.equal(box.y + box.height / 2, 300, 'vertically centered on the given y');
+});
+
+test('getButtonBox: every button on every screen defaults to the same size', () => {
+  const a = getButtonBox(600, 100);
+  const b = getButtonBox(600, 500);
+  assert.equal(a.width, b.width);
+  assert.equal(a.height, b.height);
+});
+
+test('primary button is filled with the primary color and has no outline', () => {
+  const ctx = new FakeContext();
+  drawButton(ctx, BOX, 'Play', { variant: 'primary' });
+  assert.equal(ctx.ops.find((op) => op.type === 'fill').fillStyle, COLORS.buttonPrimary);
+  assert.equal(ctx.ops.filter((op) => op.type === 'stroke').length, 0);
+});
+
+test('primary button gets lighter when hovered', () => {
+  const ctx = new FakeContext();
+  drawButton(ctx, BOX, 'Play', { variant: 'primary', hovered: true });
+  assert.equal(ctx.ops.find((op) => op.type === 'fill').fillStyle, COLORS.buttonPrimaryHover);
+});
+
+test('secondary button is dark with an outline, and the outline lights up on hover', () => {
+  const normal = new FakeContext();
+  drawButton(normal, BOX, 'Rules');
+  assert.equal(normal.ops.find((op) => op.type === 'fill').fillStyle, COLORS.buttonSecondary);
+  assert.equal(normal.ops.find((op) => op.type === 'stroke').strokeStyle, COLORS.buttonSecondaryBorder);
+
+  const hovered = new FakeContext();
+  drawButton(hovered, BOX, 'Rules', { hovered: true });
+  assert.equal(hovered.ops.find((op) => op.type === 'fill').fillStyle, COLORS.buttonSecondaryHover);
+  assert.equal(hovered.ops.find((op) => op.type === 'stroke').strokeStyle, COLORS.buttonSecondaryBorderHover);
+});
+
+test('button draws its label text', () => {
+  const ctx = new FakeContext();
+  drawButton(ctx, BOX, 'Return to Menu');
+  assert.equal(labelDrawn(ctx).text, 'Return to Menu');
+});
+
+// ---- Panels (the dark cards behind the menu / pause / winner text) ----
+
+const CARD = { x: 150, y: 130, width: 300, height: 340 };
+
+function accentBars(ctx) {
+  // The accent bar is the only fillRect drawn by drawPanel.
+  return ctx.ops.filter((op) => op.type === 'fillRect');
+}
+
+test('panel is filled with the panel color', () => {
+  const ctx = new FakeContext();
+  drawPanel(ctx, CARD, COLORS.markX);
+  assert.ok(ctx.ops.some((op) => op.type === 'fill' && op.fillStyle === COLORS.panelFill));
+});
+
+test('panel with one accent colour draws a single bar across the top edge', () => {
+  const ctx = new FakeContext();
+  drawPanel(ctx, CARD, COLORS.markO);
+  const bars = accentBars(ctx);
+  assert.equal(bars.length, 1);
+  assert.equal(bars[0].fillStyle, COLORS.markO);
+  assert.equal(bars[0].x, CARD.x);
+  assert.equal(bars[0].y, CARD.y);
+  assert.equal(bars[0].w, CARD.width);
+});
+
+test('panel with two accent colours splits the bar between them (the menu uses X blue + O red)', () => {
+  const ctx = new FakeContext();
+  drawPanel(ctx, CARD, [COLORS.markX, COLORS.markO]);
+  const bars = accentBars(ctx);
+  assert.equal(bars.length, 2);
+  assert.equal(bars[0].fillStyle, COLORS.markX);
+  assert.equal(bars[1].fillStyle, COLORS.markO);
+  assert.equal(bars[0].x + bars[0].w, bars[1].x, 'the two halves must meet in the middle');
+  assert.equal(bars[0].w + bars[1].w, CARD.width);
+});
+
+// ---- Readability: every piece of text must be readable on its background ----
+// Uses the WCAG contrast ratio; 4.5 is the usual minimum for normal-size text.
+
+function luminance(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const channel = (v) => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255);
+}
+
+function contrastRatio(a, b) {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
+}
+
+const MIN_CONTRAST = 4.5;
+
+test('button text is readable on every button colour, including hover', () => {
+  const pairs = [
+    ['primary', COLORS.buttonPrimaryText, COLORS.buttonPrimary],
+    ['primary hover', COLORS.buttonPrimaryText, COLORS.buttonPrimaryHover],
+    ['secondary', COLORS.buttonSecondaryText, COLORS.buttonSecondary],
+    ['secondary hover', COLORS.buttonSecondaryText, COLORS.buttonSecondaryHover],
+  ];
+  for (const [name, text, background] of pairs) {
+    assert.ok(contrastRatio(text, background) >= MIN_CONTRAST, `${name} button text is too faint`);
+  }
+});
+
+test('text on the cards is readable (titles, subtitles and the player-coloured turn text)', () => {
+  const texts = {
+    title: COLORS.titleText,
+    subtitle: COLORS.subtitleText,
+    'X turn text': COLORS.markX,
+    'O turn text': COLORS.markO,
+  };
+  for (const [name, color] of Object.entries(texts)) {
+    assert.ok(contrastRatio(color, COLORS.panelFill) >= MIN_CONTRAST, `${name} is too faint on the card`);
+  }
 });

@@ -10,6 +10,16 @@
 
 import { GRID_SIZE } from './gameLogic.js';
 
+// Same font stack as the score panels in style.css, so canvas text and page
+// text look like one design.
+export const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+export const FONTS = {
+  title: `700 28px ${FONT_FAMILY}`,
+  subtitle: `400 16px ${FONT_FAMILY}`,
+  button: `600 20px ${FONT_FAMILY}`,
+  body: `400 15px ${FONT_FAMILY}`,
+};
+
 export const COLORS = {
   background: '#0a0a0a',
   // Previous values (#3a3a3a outer, #2a2a2a inner) were too close to the
@@ -32,9 +42,20 @@ export const COLORS = {
   playableBorder: '#3ddc84',
   wonBoardOverlayX: 'rgba(66, 135, 245, 0.18)',
   wonBoardOverlayO: 'rgba(245, 90, 90, 0.18)',
-  menuButton: '#32cd32',
-  menuButtonText: '#ffffff',
+  // Cards (menu, pause, winner) - same dark card look as the score panels.
+  panelFill: '#141414',
+  panelBorder: '#2a2a2a',
+  // Buttons: one filled "primary" action per screen, the rest outlined.
+  buttonPrimary: '#3ddc84',
+  buttonPrimaryHover: '#6ae8a2',
+  buttonPrimaryText: '#06210f',
+  buttonSecondary: '#1c1c1c',
+  buttonSecondaryHover: '#262626',
+  buttonSecondaryBorder: '#3a3a3a',
+  buttonSecondaryBorderHover: '#3ddc84',
+  buttonSecondaryText: '#ffffff',
   titleText: '#ffffff',
+  subtitleText: '#a0a0a0',
   infoText: '#aaaaaa',
   winnerText: '#32cd32',
 };
@@ -86,8 +107,9 @@ function drawBigMark(ctx, mark, x, y, size) {
  * @param activeBoard [row, col] the player is restricted to, or null for "play anywhere"
  * @param winners 3x3 array of 'X' | 'O' | null - winner of each sub-board
  * @param fulls 3x3 array of booleans - whether each sub-board is completely filled
+ * @param showPlayable set false to hide the green playable-board borders (e.g. once the game is won)
  */
-export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) {
+export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls, showPlayable = true) {
   ctx.fillStyle = COLORS.background;
   ctx.fillRect(0, 0, canvasSize, canvasSize);
 
@@ -114,7 +136,7 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
       // than a background fill, so it never washes out the grid lines.
       const isRestrictedToHere = activeBoard && activeBoard[0] === i && activeBoard[1] === j;
       const freeToPlayAnywhere = !activeBoard;
-      const isPlayable = (isRestrictedToHere || freeToPlayAnywhere) && isOpen;
+      const isPlayable = showPlayable && (isRestrictedToHere || freeToPlayAnywhere) && isOpen;
 
       // Tint a sub-board once it has been won.
       if (winner === 'X') {
@@ -182,32 +204,103 @@ export function drawBoard(ctx, canvasSize, boards, activeBoard, winners, fulls) 
   }
 }
 
-/** Draw a centered button and return its bounding box in canvas coordinates (for hit-testing). */
-export function drawButton(ctx, canvasSize, label, centerY, width = 160, height = 50, font = '28px sans-serif') {
-  const x = (canvasSize - width) / 2;
-  const y = centerY - height / 2;
+export const BUTTON_WIDTH = 240;
+export const BUTTON_HEIGHT = 52;
+const BUTTON_RADIUS = 10;
+const PANEL_RADIUS = 14;
+const PANEL_ACCENT_HEIGHT = 4;
 
-  ctx.fillStyle = COLORS.menuButton;
-  ctx.fillRect(x, y, width, height);
-
-  ctx.fillStyle = COLORS.menuButtonText;
-  ctx.font = font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, canvasSize / 2, centerY);
-
-  return { x, y, width, height };
+/**
+ * Where a centered button sits. Kept separate from drawing so the game can
+ * hit-test the mouse against the box (for the hover effect) before drawing.
+ */
+export function getButtonBox(canvasSize, centerY, width = BUTTON_WIDTH, height = BUTTON_HEIGHT) {
+  return { x: (canvasSize - width) / 2, y: centerY - height / 2, width, height };
 }
 
-export function drawTitle(ctx, canvasSize, text, y, font = '36px sans-serif') {
-  ctx.fillStyle = COLORS.titleText;
+function traceRoundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * Draw a rounded button.
+ * @param box - from getButtonBox()
+ * @param variant 'primary' (filled green, the main action) or 'secondary' (dark with an outline)
+ * @param hovered true while the mouse is over it
+ */
+export function drawButton(ctx, box, label, { variant = 'secondary', hovered = false } = {}) {
+  const primary = variant === 'primary';
+
+  traceRoundedRect(ctx, box.x, box.y, box.width, box.height, BUTTON_RADIUS);
+  if (primary) {
+    ctx.fillStyle = hovered ? COLORS.buttonPrimaryHover : COLORS.buttonPrimary;
+  } else {
+    ctx.fillStyle = hovered ? COLORS.buttonSecondaryHover : COLORS.buttonSecondary;
+  }
+  ctx.fill();
+
+  if (!primary) {
+    ctx.strokeStyle = hovered ? COLORS.buttonSecondaryBorderHover : COLORS.buttonSecondaryBorder;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = primary ? COLORS.buttonPrimaryText : COLORS.buttonSecondaryText;
+  ctx.font = FONTS.button;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, box.x + box.width / 2, box.y + box.height / 2);
+}
+
+/**
+ * Draw a dark rounded card with a coloured bar along its top edge - the same
+ * look as the score panels beside the board.
+ * @param accent one colour, or an array of colours to split the bar between
+ *               (the menu uses blue + red for X and O)
+ */
+export function drawPanel(ctx, box, accent) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 8;
+  traceRoundedRect(ctx, box.x, box.y, box.width, box.height, PANEL_RADIUS);
+  ctx.fillStyle = COLORS.panelFill;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = COLORS.panelBorder;
+  ctx.lineWidth = 1;
+  traceRoundedRect(ctx, box.x, box.y, box.width, box.height, PANEL_RADIUS);
+  ctx.stroke();
+
+  // Accent bar, clipped to the card so it follows the rounded corners.
+  ctx.save();
+  traceRoundedRect(ctx, box.x, box.y, box.width, box.height, PANEL_RADIUS);
+  ctx.clip();
+  const colors = Array.isArray(accent) ? accent : [accent];
+  const segment = box.width / colors.length;
+  colors.forEach((color, i) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(box.x + i * segment, box.y, segment, PANEL_ACCENT_HEIGHT);
+  });
+  ctx.restore();
+}
+
+export function drawTitle(ctx, canvasSize, text, y, font = FONTS.title, color = COLORS.titleText) {
+  ctx.fillStyle = color;
   ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, canvasSize / 2, y);
 }
 
-export function drawInfoLine(ctx, text, x, y, color = COLORS.infoText, font = '16px sans-serif') {
+export function drawInfoLine(ctx, text, x, y, color = COLORS.infoText, font = FONTS.body) {
   ctx.fillStyle = color;
   ctx.font = font;
   ctx.textAlign = 'left';
